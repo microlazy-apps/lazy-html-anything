@@ -1,0 +1,173 @@
+diff --git a/.dockerignore b/.dockerignore
+new file mode 100644
+index 0000000..e4c58f2
+--- /dev/null
++++ b/.dockerignore
+@@ -0,0 +1,33 @@
++**/node_modules
++**/.next
++**/.turbo
++**/.vercel
++**/.cache
++
++**/coverage
++**/test-results
++**/playwright-report
++e2e/ui/reports
++e2e/ui/test-results
++
++.git
++.github
++.vscode
++.idea
++
++.DS_Store
++*.tsbuildinfo
++next-env.d.ts
++
++# secrets / local env
++.env*
++!.env.example
++
++# build artifacts that shouldn't ship in the image
++/build
++/out
++docs/screenshots
++docs/assets/banner.png
++
++# lazycat metadata is consumed outside the image
++lazycat
+diff --git a/Dockerfile b/Dockerfile
+new file mode 100644
+index 0000000..13aebd0
+--- /dev/null
++++ b/Dockerfile
+@@ -0,0 +1,75 @@
++# syntax=docker/dockerfile:1.7
++#
++# Lazycat-flavored build for nexu-io/html-anything.
++#
++# Upstream is a pnpm workspace with the Next.js app at `next/`. The lazycat
++# wrapper ships Claude Code as the bundled coding-agent CLI: in a container we
++# can't read the user's local CLI sessions, so the wrapper exposes
++# ANTHROPIC_API_KEY as a deploy_param and the in-container `claude` binary
++# picks it up via env at spawn time.
++
++# ── builder ───────────────────────────────────────────────────────────────────
++FROM node:22-slim AS builder
++
++ENV PNPM_HOME=/pnpm
++ENV PATH=$PNPM_HOME:$PATH
++RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
++
++WORKDIR /build
++
++# Workspace manifests first → maximal cache reuse on lockfile-only changes.
++COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
++COPY next/package.json ./next/
++COPY e2e/package.json ./e2e/
++
++RUN pnpm install --frozen-lockfile
++
++# Now bring in the full workspace and build.
++COPY . .
++
++# Force `output: 'standalone'` for this build without rewriting the upstream
++# config. The Next.js CLI honors NEXT_PRIVATE_STANDALONE=true at build time.
++ENV NEXT_PRIVATE_STANDALONE=true
++ENV NEXT_TELEMETRY_DISABLED=1
++RUN pnpm -F @html-anything/next build
++
++# ── runner ────────────────────────────────────────────────────────────────────
++FROM node:22-slim AS runner
++
++# `curl` is used by lazycat's healthcheck; `tini` reaps the agent CLI children
++# we spawn (claude code shells out to `git`, ripgrep, etc.).
++RUN apt-get update \
++ && apt-get install -y --no-install-recommends curl tini ca-certificates \
++ && rm -rf /var/lib/apt/lists/*
++
++# Claude Code is the bundled coding-agent CLI. The wrapper expects users to
++# supply ANTHROPIC_API_KEY via deploy params; `claude -p` consumes it.
++RUN npm install -g @anthropic-ai/claude-code@latest \
++ && npm cache clean --force
++
++WORKDIR /app
++
++# Next.js standalone output is rooted at `next/.next/standalone/`. Inside it,
++# the workspace tree is preserved, so the launchable entrypoint is
++# `next/.next/standalone/next/server.js`. We mirror that layout under /app.
++COPY --from=builder /build/next/.next/standalone ./
++COPY --from=builder /build/next/.next/static       ./next/.next/static
++COPY --from=builder /build/next/public             ./next/public
++# Skill registry reads templates from process.cwd() + 'src/lib/templates/skills'.
++# Standalone tracing drops the source tree, so we restore the templates dir.
++COPY --from=builder /build/next/src/lib/templates  ./next/src/lib/templates
++
++COPY lazycat-entrypoint.sh /usr/local/bin/lazycat-entrypoint.sh
++RUN chmod +x /usr/local/bin/lazycat-entrypoint.sh
++
++ENV NODE_ENV=production
++ENV NEXT_TELEMETRY_DISABLED=1
++ENV PORT=3000
++ENV HOSTNAME=0.0.0.0
++# Default HOME → persisted volume so Claude Code's ~/.claude state and
++# html-anything's ~/.html-anything state both survive container restarts.
++ENV HOME=/lzcapp/var/persist
++
++EXPOSE 3000
++
++ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/lazycat-entrypoint.sh"]
+diff --git a/lazycat-entrypoint.sh b/lazycat-entrypoint.sh
+new file mode 100755
+index 0000000..3426ce5
+--- /dev/null
++++ b/lazycat-entrypoint.sh
+@@ -0,0 +1,47 @@
++#!/usr/bin/env bash
++# Lazycat-flavored entrypoint for html-anything.
++#
++# Layout inside the container:
++#   /app/next/server.js                 → Next.js standalone entry
++#   /app/next/.next/static/             → built static assets
++#   /app/next/public/                   → public assets
++#   /app/next/src/lib/templates/skills/ → bundled skill registry
++#
++# Persistent state (bind-mounted from /lzcapp/var/persist on the host):
++#   $HOME/.claude/             → Claude Code session + settings
++#   $HOME/.html-anything/      → marketplace skills + deploy creds
++#
++# We don't ship a default ANTHROPIC_API_KEY — if the user leaves the deploy
++# param blank, claude-code will fail at first prompt and the UI surfaces the
++# stderr verbatim. That's the right UX: the wrapper can't paper over a
++# missing credential.
++
++set -euo pipefail
++
++: "${HOME:=/lzcapp/var/persist}"
++export HOME
++
++mkdir -p "${HOME}/.claude" "${HOME}/.html-anything/skills"
++
++# Claude Code respects ANTHROPIC_API_KEY at every spawn; surface a friendly
++# log when the user hasn't filled it yet so they know where to look.
++if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
++  echo "[lazycat-entrypoint] WARNING: ANTHROPIC_API_KEY is empty." >&2
++  echo "[lazycat-entrypoint] Fill it in the lazycat 应用设置 → 部署参数 panel," >&2
++  echo "[lazycat-entrypoint] then restart the app. Claude Code invocations will fail until then." >&2
++fi
++
++# Optional: route Claude Code through a relay (deepseek-r1 proxy, custom
++# Anthropic endpoint, …). When set, claude-code forwards every call here.
++if [ -n "${ANTHROPIC_BASE_URL:-}" ]; then
++  echo "[lazycat-entrypoint] Using ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL}"
++fi
++
++cd /app/next
++
++# Skip Claude Code's first-run onboarding wizard inside the container. The
++# wizard wants a TTY; we want a one-shot CLI.
++export DISABLE_AUTOUPDATER=1
++export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
++
++exec node server.js

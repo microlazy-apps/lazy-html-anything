@@ -1,0 +1,109 @@
+package: cloud.lazycat.app.html-anything
+version: ${VERSION}
+name: HTML Anything
+description: AI 驱动的 HTML 编辑器 —— 把 Markdown / CSV / JSON 一键变成可发布的 HTML
+author: nexu-io
+license: Apache-2.0
+homepage: https://github.com/microlazy-apps/lazy-html-anything
+
+unsupported_platforms:
+  - ios
+  - android
+
+locales:
+  zh-CN:
+    name: HTML Anything
+    description: 自托管 HTML Anything —— 用 Claude Code 把任何内容渲染成可发布的 HTML
+    usage: |
+      ## 关于 HTML Anything
+
+      HTML Anything 把 Markdown / CSV / TSV / JSON / SQL / 纯文本，
+      通过一个本地编排的 Coding Agent，变成「可直接发布」的单页 HTML：
+      朋友圈卡片、Keynote 风幻灯片、海报、简历、Twitter 配图、
+      仪表盘原型……都能一键产出，再一键导出微信 / X / 知乎 / .html / .png。
+
+      75 个 skill 模板覆盖 9 个产出场景（magazine 文章 · keynote · 简历 · 海报 ·
+      小红书 · Twitter 卡 · 网页原型 · 数据报告 · Hyperframes 视频帧）。
+
+      ## 与上游的差异
+
+      上游 `nexu-io/html-anything` 默认调用你本机已经登录的 8 种 Coding Agent CLI
+      （Claude Code / Cursor / Codex / Gemini …），但容器里无法读取你本机的登录态。
+      本包装版**只内置 Claude Code**，并通过 ANTHROPIC_API_KEY 部署参数驱动 ——
+      用你自己的 Anthropic API key（在 https://console.anthropic.com/settings/keys
+      申请）填进部署参数即可。
+
+      如果你已经在使用某个第三方 Anthropic 中转/代理，
+      把 ANTHROPIC_BASE_URL 也填进部署参数，调用就会全部走中转。
+
+      ## 部署参数
+
+      - **ANTHROPIC_API_KEY** —— Anthropic API key（必填，未填时所有 Agent 调用都会报错）
+      - **ANTHROPIC_BASE_URL** —— 可选 Anthropic 中转/代理 URL（留空走官方接口）
+      - **ANTHROPIC_MODEL** —— 可选模型 ID（留空交由 Claude Code 自行选择）
+
+      所有数据持久化到 /lzcapp/var/persist：
+      - `.claude/` —— Claude Code 会话状态、设置
+      - `.html-anything/skills/` —— 通过 Marketplace 安装的第三方 skill 包
+      - `.html-anything/{vercel,cloudflare-pages}.json` —— 一键部署到 Vercel/CF 的凭证
+
+      ## 使用
+
+      装好后访问 https://html-anything.{你的微服域名}：
+      1. 顶栏「Agent」会自动检测到内置的 Claude Code，选中即可
+      2. 左侧粘贴 Markdown / CSV / JSON / SQL / 文本
+      3. 中间从 75 个模板里挑一个（搜索 / 按场景过滤）
+      4. ⌘+Enter，右侧 iframe 实时渲染（SSE 流式）
+      5. 顶栏一键导出：微信 / X / 知乎 / .html / .png
+
+      上游项目 https://github.com/nexu-io/html-anything（Apache-2.0）
+
+  en:
+    name: HTML Anything
+    description: Self-hosted HTML Anything — render any content to publishable HTML via Claude Code
+    usage: |
+      ## About HTML Anything
+
+      HTML Anything turns Markdown / CSV / TSV / JSON / SQL / plain text into
+      ship-ready single-page HTML — magazine cards, Keynote-style decks,
+      posters, résumés, Twitter cards, dashboards, data reports — all driven
+      by a local coding-agent CLI, with one-click export to WeChat / X / Zhihu
+      / `.html` / `.png`.
+
+      75 skill templates across 9 surface modes (magazine · deck · résumé ·
+      poster · Xiaohongshu · tweet card · web prototype · data report ·
+      Hyperframes video frames).
+
+      ## Difference from upstream
+
+      Upstream `nexu-io/html-anything` is local-first — it shells out to
+      whichever of 8 coding-agent CLIs you already have logged in on your
+      laptop. In a container we can't access your local CLI sessions, so this
+      wrapper **bundles Claude Code** and drives it via the
+      `ANTHROPIC_API_KEY` deploy param. Get one at
+      https://console.anthropic.com/settings/keys.
+
+      Set `ANTHROPIC_BASE_URL` to route every call through an
+      Anthropic-compatible relay / proxy if you prefer.
+
+      ## Deploy params
+
+      - **ANTHROPIC_API_KEY** — Anthropic API key (required; agent calls fail otherwise)
+      - **ANTHROPIC_BASE_URL** — Optional relay URL (blank → api.anthropic.com)
+      - **ANTHROPIC_MODEL** — Optional model override (blank → Claude Code default)
+
+      Persistent state at /lzcapp/var/persist:
+      - `.claude/` — Claude Code session + settings
+      - `.html-anything/skills/` — marketplace-installed skill packs
+      - `.html-anything/{vercel,cloudflare-pages}.json` — Vercel/CF deploy credentials
+
+      ## Usage
+
+      Open https://html-anything.{your-box-domain}:
+      1. Top bar auto-detects the bundled Claude Code — pick it
+      2. Paste Markdown / CSV / JSON / SQL / text in the left pane
+      3. Pick one of 75 skill templates in the middle
+      4. ⌘+Enter — the right iframe streams HTML in real time (SSE)
+      5. Top bar: one-click export to WeChat / X / Zhihu / `.html` / `.png`
+
+      Upstream project: https://github.com/nexu-io/html-anything (Apache-2.0)

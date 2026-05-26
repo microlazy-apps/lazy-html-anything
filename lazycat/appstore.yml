@@ -1,0 +1,65 @@
+source: https://github.com/nexu-io/html-anything
+source_author: nexu-io
+is_original: false
+keywords: ai,html,markdown,claude-code,agent,editor,export,nextjs
+
+support_pc: true
+support_mobile: false
+
+screenshots:
+  pc:
+    - lazycat/screenshots/01-entry-view.png
+    - lazycat/screenshots/02-template-picker.png
+    - lazycat/screenshots/03-streaming.png
+    - lazycat/screenshots/04-export.png
+  mobile: []
+
+description:
+  zh-CN: |
+    HTML Anything 是 AI 驱动的 HTML 编辑器。把 Markdown / CSV / TSV / JSON /
+    SQL / 纯文本，通过本地编排的 Coding Agent，一键变成「可直接发布」的单页
+    HTML，再一键导出到微信 / X / 知乎。
+
+    特性
+    - 75 个 skill 模板覆盖 9 个产出场景（magazine 文章 · keynote · 简历 ·
+      海报 · 小红书 · Twitter 卡 · 网页原型 · 数据报告 · Hyperframes 视频帧）
+    - SSE 流式渲染 —— 边生成边在 iframe 里更新，不喜欢可以打断重 prompt
+    - juice CSS 内联 → 微信粘贴无重排
+    - modern-screenshot → 2× PNG → ClipboardItem，直接贴进推特编辑器
+    - LaTeX 自动转知乎可识别的图片占位符
+    - 一键下载 .html / .png；可选一键部署到 Vercel / Cloudflare Pages
+
+    与上游的差异：上游需要你本机已经登录 Claude Code / Cursor / Codex / 等
+    8 种 CLI 之一；本包装版**只内置 Claude Code**，通过 ANTHROPIC_API_KEY 部署
+    参数驱动。如果你已经在用某个 Anthropic 中转/代理，把 ANTHROPIC_BASE_URL
+    也填进部署参数即可。
+
+    上游项目: https://github.com/nexu-io/html-anything（Apache-2.0）
+    本仓库（懒猫包装）: https://github.com/microlazy-apps/lazy-html-anything
+
+  en: |
+    HTML Anything is an AI-powered HTML editor. Turn Markdown / CSV / TSV /
+    JSON / SQL / plain text into ship-ready single-page HTML via a local
+    coding-agent CLI, then one-click export to WeChat / X / Zhihu.
+
+    Features
+    - 75 skill templates across 9 surface modes (magazine · deck · résumé ·
+      poster · Xiaohongshu · tweet card · web prototype · data report ·
+      Hyperframes video frames)
+    - SSE streaming render — watch the page build line by line, interrupt
+      and re-prompt without wasting a generation
+    - `juice` inlines CSS → paste straight into WeChat with no re-formatting
+    - `modern-screenshot` → 2× PNG → `ClipboardItem` → straight into the
+      tweet composer
+    - LaTeX → Zhihu-friendly image placeholders
+    - Download `.html` / `.png`; optional one-click deploy to Vercel /
+      Cloudflare Pages
+
+    Differs from upstream: upstream is local-first — it shells out to
+    whichever of 8 coding-agent CLIs you already have logged in. This wrapper
+    **bundles Claude Code** and drives it via the `ANTHROPIC_API_KEY` deploy
+    param. Optional `ANTHROPIC_BASE_URL` routes every call through your
+    Anthropic-compatible relay.
+
+    Upstream project: https://github.com/nexu-io/html-anything (Apache-2.0)
+    This wrapper repo: https://github.com/microlazy-apps/lazy-html-anything
