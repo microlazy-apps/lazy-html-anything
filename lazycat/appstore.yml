@@ -30,9 +30,11 @@ description:
     - 一键下载 .html / .png；可选一键部署到 Vercel / Cloudflare Pages
 
     与上游的差异：上游需要你本机已经登录 Claude Code / Cursor / Codex / 等
-    8 种 CLI 之一；本包装版**只内置 Claude Code**，通过 ANTHROPIC_API_KEY 部署
-    参数驱动。如果你已经在用某个 Anthropic 中转/代理，把 ANTHROPIC_BASE_URL
-    也填进部署参数即可。
+    8 种 CLI 之一；本包装版**只内置 Claude Code**，并在容器里同时跑一个
+    **webshell**（路径 `/shell/`）。装好后先打开
+    `https://html-anything.{你的微服域名}/shell/`，按 Claude Code 自己的方式
+    完成登录（`claude /login` 走 OAuth，或者配 apiKeyHelper 走 API key），
+    凭证落到 `~/.claude/` —— 持久化卷上，升级 / 重启 / 重装都保留。
 
     上游项目: https://github.com/nexu-io/html-anything（Apache-2.0）
     本仓库（懒猫包装）: https://github.com/microlazy-apps/lazy-html-anything
@@ -56,10 +58,13 @@ description:
       Cloudflare Pages
 
     Differs from upstream: upstream is local-first — it shells out to
-    whichever of 8 coding-agent CLIs you already have logged in. This wrapper
-    **bundles Claude Code** and drives it via the `ANTHROPIC_API_KEY` deploy
-    param. Optional `ANTHROPIC_BASE_URL` routes every call through your
-    Anthropic-compatible relay.
+    whichever of 8 coding-agent CLIs you already have logged in. This
+    wrapper **bundles Claude Code** plus a **webshell** at `/shell/`. After
+    install, open `https://html-anything.{your-box-domain}/shell/` and
+    configure Claude Code using its own auth flow (`claude /login` for
+    OAuth, or `apiKeyHelper` for an API key). Credentials live in
+    `~/.claude/`, which is on the lazycat persistent volume, so they
+    survive upgrades and restarts.
 
     Upstream project: https://github.com/nexu-io/html-anything (Apache-2.0)
     This wrapper repo: https://github.com/microlazy-apps/lazy-html-anything

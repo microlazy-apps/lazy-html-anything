@@ -39,10 +39,10 @@ index 0000000..e4c58f2
 +lazycat
 diff --git a/Dockerfile b/Dockerfile
 new file mode 100644
-index 0000000..4e4ecd7
+index 0000000..c157592
 --- /dev/null
 +++ b/Dockerfile
-@@ -0,0 +1,107 @@
+@@ -0,0 +1,114 @@
 +# syntax=docker/dockerfile:1.7
 +#
 +# Lazycat-flavored build for nexu-io/html-anything.
@@ -145,6 +145,13 @@ index 0000000..4e4ecd7
 +# ~/.html-anything state survive container restarts; the webshell user lands
 +# in this directory too.
 +ENV HOME=/lzcapp/var/persist
++# Tell Claude Code it's running inside an isolated sandbox so it skips the
++# "refuse to bypassPermissions under root" check. We are root in the
++# container by necessity (lazycat doesn't preserve UID on the persist
++# bind), and html-anything's argv.ts always passes
++# `--permission-mode bypassPermissions` — without this env, every spawn
++# would fail with "cannot be used with root/sudo privileges".
++ENV IS_SANDBOX=1
 +
 +# 3000 = Next.js;  7681 = ttyd. Both proxied through lazycat (see manifest).
 +EXPOSE 3000 7681
