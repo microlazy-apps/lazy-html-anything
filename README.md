@@ -10,21 +10,36 @@
 lzc-cli lpk install cloud.lazycat.app.html-anything-X.Y.Z.lpk
 ```
 
-## 配置
+## 首次配置
 
-安装时会弹出部署参数面板，填两个就能用：
+本包装版**不用部署参数**，所有 CLI 配置在 webshell 里按 CLI 自己的方式做。
 
-| 参数 | 必填 | 含义 |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | **是**（实际） | 从 https://console.anthropic.com/settings/keys 申请。若使用第三方 Anthropic 中转/代理则用代理的 key |
-| `ANTHROPIC_BASE_URL` | 否 | 例 `https://api.packy.cc`、自建中转 URL 等；留空走官方 `api.anthropic.com` |
-| `ANTHROPIC_MODEL` | 否 | 例 `claude-opus-4-7` / `claude-sonnet-4-6` / `claude-haiku-4-5`；留空交由 Claude Code 默认选择 |
+1. 装好后访问 `https://html-anything.{你的微服域名}/shell/`（末尾斜杠必须有）
+2. 看到 xterm 终端，提示符在 `/lzcapp/var/persist`（这是容器里的 `$HOME`）
+3. 选一条登录路径：
 
-填好之后访问 `https://html-anything.{你的微服域名}` 即可。
+   **A. OAuth（推荐给 Claude Pro / Max 订阅）**
+   ```sh
+   claude /login
+   ```
+   按提示打开浏览器完成 OAuth，凭证落到 `~/.claude/.credentials.json`。
+
+   **B. API key（apiKeyHelper 方式，热加载）**
+   ```sh
+   echo 'sk-ant-...' > ~/.claude/api-key.txt
+   chmod 600 ~/.claude/api-key.txt
+   cat > ~/.claude/settings.json <<'EOF'
+   {"apiKeyHelper": "cat /lzcapp/var/persist/.claude/api-key.txt"}
+   EOF
+   ```
+   Claude Code 每次 spawn 时跑 helper 拿 key，**改 `api-key.txt` 立即生效**，不用重启。
+
+4. 验证：`claude -p "hi"` 应该返回一条短回复。
+5. 回主 UI `https://html-anything.{你的微服域名}/`，顶栏选 Claude Code，粘内容 + 选模板 + ⌘+Enter。
 
 ## 用法
 
-1. 顶栏「Agent」会自动检测到内置的 **Claude Code** —— 直接选中
+1. 顶栏「Agent」自动检测到内置的 **Claude Code** —— 选中
 2. 左侧粘贴 Markdown / CSV / TSV / JSON / SQL / 文本
 3. 中间从 75 个模板里挑一个（按 mode/scenario 过滤）
 4. ⌘+Enter，右侧 iframe 实时流式渲染
@@ -32,22 +47,27 @@ lzc-cli lpk install cloud.lazycat.app.html-anything-X.Y.Z.lpk
 
 ## 与上游的差异
 
-上游 `nexu-io/html-anything` 是**本地优先**工具，会自动检测你本机已经登录的 8 种 Coding Agent CLI（Claude Code / Cursor / Codex / Gemini / Copilot / OpenCode / Qwen / Aider）并直接复用其登录态。**容器内无法读取你本机的 CLI 会话**，所以本包装版做了一个折中：
+上游 `nexu-io/html-anything` 是**本地优先**工具，会自动检测你本机已经登录的 8 种 Coding Agent CLI（Claude Code / Cursor / Codex / Gemini / Copilot / OpenCode / Qwen / Aider）并直接复用其登录态。**容器内无法读取你本机的 CLI 会话**，所以本包装版做了三个折中：
 
-- **只内置 Claude Code**（其他 CLI 没法分发）
-- 通过 deploy_param 注入 `ANTHROPIC_API_KEY` —— 用 API key 模式跑 Claude Code
-
-如果你已经在用某个 Anthropic 中转（如 packy.cc、yourapi.cn 等），把 `ANTHROPIC_BASE_URL` 也填上即可，调用全部走代理；这种方式通常比直连官方 API 便宜。
+- **只内置 Claude Code**（其他 CLI 暂未打包）
+- **额外跑一个 ttyd webshell** 在 `/shell/`，让你按 CLI 自己的登录方式配置 —— `claude /login` 也好、`apiKeyHelper` 也好、直接 `nano ~/.claude/settings.json` 也好，wrapper 完全不介入
+- **`HOME=/lzcapp/var/persist`**，让 `~/.claude/` 自动落到持久化卷，凭证升级 / 重启 / 重装都保留
 
 ## 数据持久化
 
-所有状态写到 `/lzcapp/var/persist/`：
+所有状态写到 `/lzcapp/var/persist/`（容器里的 `$HOME`）：
 
-- `.claude/` —— Claude Code 会话状态、设置
+- `.claude/` —— Claude Code 会话状态、settings、credentials
 - `.html-anything/skills/` —— 通过 Marketplace 安装的第三方 skill 包
 - `.html-anything/{vercel,cloudflare-pages}.json` —— Vercel / Cloudflare Pages 部署凭证（如果用一键部署功能）
 
 升级或重启都会保留。
+
+## 已知约束
+
+- **不支持移动端**（iOS / Android）：上游 UI 是为桌面三栏布局设计的，竖屏无法使用；lpk metadata 显式标 `unsupported_platforms: [ios, android]`。
+- **容器内以 root 运行**：因为 `--permission-mode bypassPermissions` 默认拒绝 root，Dockerfile 设了 `IS_SANDBOX=1` 让 Claude Code 跳过这层检查（懒猫沙箱本身已经隔离）。
+- **`/shell/` 末尾斜杠**：lazycat 反代对子路径要求 `location: /shell/`（带斜杠），不带斜杠会 308 → 404。
 
 ## 上游 & License
 
