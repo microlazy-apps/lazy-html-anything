@@ -2,7 +2,9 @@ application:
   subdomain: html-anything
   upstreams:
     # Order matters — lazycat picks the first matching prefix.
-    - location: /shell
+    # NOTE: /shell/ must have the trailing slash; without it lazycat's proxy
+    # 308s /shell/* → /shell and then 404s. With it, prefix matching works.
+    - location: /shell/
       backend: http://main:7681
     - location: /
       backend: http://main:3000
