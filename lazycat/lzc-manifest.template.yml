@@ -1,6 +1,9 @@
 application:
   subdomain: html-anything
   upstreams:
+    # Order matters — lazycat picks the first matching prefix.
+    - location: /shell
+      backend: http://main:7681
     - location: /
       backend: http://main:3000
   public_path:
@@ -18,13 +21,9 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - HOSTNAME=0.0.0.0
-      # Persist Claude Code state + html-anything skills under
-      # /lzcapp/var/persist via HOME.
+      # HOME → persisted bind. Every CLI's standard ~/.<cli>/ dir lives here
+      # (Claude Code's ~/.claude, html-anything's ~/.html-anything, …).
       - HOME=/lzcapp/var/persist
-      # Deploy-param wiring — the entrypoint surfaces a warning when blank.
-      - ANTHROPIC_API_KEY={{.U.ANTHROPIC_API_KEY}}
-      - ANTHROPIC_BASE_URL={{.U.ANTHROPIC_BASE_URL}}
-      - ANTHROPIC_MODEL={{.U.ANTHROPIC_MODEL}}
     binds:
       - /lzcapp/var/persist:/lzcapp/var/persist
     healthcheck:

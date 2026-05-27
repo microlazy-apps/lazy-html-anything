@@ -29,32 +29,35 @@ locales:
 
       上游 `nexu-io/html-anything` 默认调用你本机已经登录的 8 种 Coding Agent CLI
       （Claude Code / Cursor / Codex / Gemini …），但容器里无法读取你本机的登录态。
-      本包装版**只内置 Claude Code**，并通过 ANTHROPIC_API_KEY 部署参数驱动 ——
-      用你自己的 Anthropic API key（在 https://console.anthropic.com/settings/keys
-      申请）填进部署参数即可。
+      本包装版**只内置 Claude Code**，并在容器里同时跑一个 **webshell**（路径
+      `/shell`），让你按 Claude Code 自己的方式登录或配置。
 
-      如果你已经在使用某个第三方 Anthropic 中转/代理，
-      把 ANTHROPIC_BASE_URL 也填进部署参数，调用就会全部走中转。
+      ## 首次配置
 
-      ## 部署参数
+      1. 装好后浏览器打开 **`https://html-anything.{你的微服域名}/shell/`**
+      2. 在 webshell 里跑 `claude /login`（如果你是 Claude Pro / Max 订阅）
+         或参考 Claude Code 文档配置 API key（apiKeyHelper / 环境变量 / 其它）
+      3. 凭证会写到 `~/.claude/.credentials.json` —— 这个目录在 lazycat 持久化卷
+         上，升级 / 重启 / 重装 lpk 都保留
 
-      - **ANTHROPIC_API_KEY** —— Anthropic API key（必填，未填时所有 Agent 调用都会报错）
-      - **ANTHROPIC_BASE_URL** —— 可选 Anthropic 中转/代理 URL（留空走官方接口）
-      - **ANTHROPIC_MODEL** —— 可选模型 ID（留空交由 Claude Code 自行选择）
+      ## 数据持久化
 
-      所有数据持久化到 /lzcapp/var/persist：
-      - `.claude/` —— Claude Code 会话状态、设置
+      所有状态写到 `/lzcapp/var/persist`（容器里的 `$HOME`）：
+      - `.claude/` —— Claude Code 会话状态、settings、credentials
       - `.html-anything/skills/` —— 通过 Marketplace 安装的第三方 skill 包
       - `.html-anything/{vercel,cloudflare-pages}.json` —— 一键部署到 Vercel/CF 的凭证
 
+      Wrapper 自己**不**管 API key、不写 `.env`、不动 settings.json ——
+      所有 CLI 配置完全是 CLI 自己的事，我们只负责让它落到持久化盘上。
+
       ## 使用
 
-      装好后访问 https://html-anything.{你的微服域名}：
-      1. 顶栏「Agent」会自动检测到内置的 Claude Code，选中即可
-      2. 左侧粘贴 Markdown / CSV / JSON / SQL / 文本
-      3. 中间从 75 个模板里挑一个（搜索 / 按场景过滤）
-      4. ⌘+Enter，右侧 iframe 实时渲染（SSE 流式）
-      5. 顶栏一键导出：微信 / X / 知乎 / .html / .png
+      1. 访问 `https://html-anything.{你的微服域名}/`
+      2. 顶栏「Agent」会自动检测到内置的 Claude Code
+      3. 左侧粘贴 Markdown / CSV / JSON / SQL / 文本
+      4. 中间从 75 个模板里挑一个（搜索 / 按场景过滤）
+      5. ⌘+Enter，右侧 iframe 实时渲染（SSE 流式）
+      6. 顶栏一键导出：微信 / X / 知乎 / .html / .png
 
       上游项目 https://github.com/nexu-io/html-anything（Apache-2.0）
 
@@ -78,32 +81,39 @@ locales:
 
       Upstream `nexu-io/html-anything` is local-first — it shells out to
       whichever of 8 coding-agent CLIs you already have logged in on your
-      laptop. In a container we can't access your local CLI sessions, so this
-      wrapper **bundles Claude Code** and drives it via the
-      `ANTHROPIC_API_KEY` deploy param. Get one at
-      https://console.anthropic.com/settings/keys.
+      laptop. In a container we can't access your local CLI sessions, so
+      this wrapper **bundles Claude Code** plus a **webshell** at `/shell`
+      so you can configure Claude Code through its own auth flow.
 
-      Set `ANTHROPIC_BASE_URL` to route every call through an
-      Anthropic-compatible relay / proxy if you prefer.
+      ## First-time setup
 
-      ## Deploy params
+      1. Open `https://html-anything.{your-box-domain}/shell/`
+      2. Run `claude /login` (if you have a Claude Pro / Max subscription),
+         or set up an API key per Claude Code's docs (`apiKeyHelper`, env,
+         …) inside the webshell
+      3. Credentials land in `~/.claude/.credentials.json` — that directory
+         lives on the lazycat persistent volume, so it survives upgrades /
+         restarts / reinstalls
 
-      - **ANTHROPIC_API_KEY** — Anthropic API key (required; agent calls fail otherwise)
-      - **ANTHROPIC_BASE_URL** — Optional relay URL (blank → api.anthropic.com)
-      - **ANTHROPIC_MODEL** — Optional model override (blank → Claude Code default)
+      ## Persistent storage
 
-      Persistent state at /lzcapp/var/persist:
-      - `.claude/` — Claude Code session + settings
+      All state lives under `/lzcapp/var/persist` (which is `$HOME` inside
+      the container):
+      - `.claude/` — Claude Code session, settings, credentials
       - `.html-anything/skills/` — marketplace-installed skill packs
-      - `.html-anything/{vercel,cloudflare-pages}.json` — Vercel/CF deploy credentials
+      - `.html-anything/{vercel,cloudflare-pages}.json` — Vercel/CF deploy creds
+
+      The wrapper **does not** manage API keys, write any `.env`, or touch
+      settings.json. Per-CLI configuration is the CLI's responsibility; the
+      wrapper just makes whatever the CLI persists actually persistent.
 
       ## Usage
 
-      Open https://html-anything.{your-box-domain}:
-      1. Top bar auto-detects the bundled Claude Code — pick it
-      2. Paste Markdown / CSV / JSON / SQL / text in the left pane
-      3. Pick one of 75 skill templates in the middle
-      4. ⌘+Enter — the right iframe streams HTML in real time (SSE)
-      5. Top bar: one-click export to WeChat / X / Zhihu / `.html` / `.png`
+      1. Open `https://html-anything.{your-box-domain}/`
+      2. Top bar auto-detects the bundled Claude Code
+      3. Paste Markdown / CSV / JSON / SQL / text in the left pane
+      4. Pick one of 75 skill templates in the middle
+      5. ⌘+Enter — the right iframe streams HTML in real time (SSE)
+      6. Top bar: one-click export to WeChat / X / Zhihu / `.html` / `.png`
 
       Upstream project: https://github.com/nexu-io/html-anything (Apache-2.0)

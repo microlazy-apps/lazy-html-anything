@@ -39,19 +39,29 @@ index 0000000..e4c58f2
 +lazycat
 diff --git a/Dockerfile b/Dockerfile
 new file mode 100644
-index 0000000..13aebd0
+index 0000000..4e4ecd7
 --- /dev/null
 +++ b/Dockerfile
-@@ -0,0 +1,75 @@
+@@ -0,0 +1,107 @@
 +# syntax=docker/dockerfile:1.7
 +#
 +# Lazycat-flavored build for nexu-io/html-anything.
 +#
-+# Upstream is a pnpm workspace with the Next.js app at `next/`. The lazycat
-+# wrapper ships Claude Code as the bundled coding-agent CLI: in a container we
-+# can't read the user's local CLI sessions, so the wrapper exposes
-+# ANTHROPIC_API_KEY as a deploy_param and the in-container `claude` binary
-+# picks it up via env at spawn time.
++# Upstream is a pnpm workspace with the Next.js app at `next/`. We bundle
++# Claude Code as the in-container coding-agent CLI plus ttyd as a /shell
++# webshell. The wrapper's responsibility is narrow:
++#
++#   1. Persistence — HOME=/lzcapp/var/persist redirects every CLI's standard
++#      dot-dir (~/.claude, ~/.codex, …) onto the lazycat bind mount, so
++#      whatever the CLI persists (credentials, sessions, config) survives
++#      upgrades and restarts.
++#   2. Access — ttyd at /shell gives the user a bash inside the container,
++#      gated by lazycat's platform auth, so they can `claude /login` /
++#      `claude config` / edit dot-files with whatever flow the CLI expects.
++#
++# We do NOT inject env vars, write a .env file, or pre-configure any CLI's
++# auth on the user's behalf. Per-CLI configuration is the CLI's own concern;
++# the wrapper just makes the result persistent.
 +
 +# ── builder ───────────────────────────────────────────────────────────────────
 +FROM node:22-slim AS builder
@@ -81,14 +91,33 @@ index 0000000..13aebd0
 +# ── runner ────────────────────────────────────────────────────────────────────
 +FROM node:22-slim AS runner
 +
-+# `curl` is used by lazycat's healthcheck; `tini` reaps the agent CLI children
-+# we spawn (claude code shells out to `git`, ripgrep, etc.).
++# Runtime deps:
++#   curl       — lazycat healthcheck probes
++#   tini       — reap claude-code's many child processes (git/rg/node/…)
++#   supervisor — keep `next` and `ttyd` alive in the same container
++#   nano,vim-tiny — friendly editors for the webshell user
++#   bash       — already present, but listed for intent (ttyd shells out to it)
 +RUN apt-get update \
-+ && apt-get install -y --no-install-recommends curl tini ca-certificates \
++ && apt-get install -y --no-install-recommends \
++      curl tini ca-certificates \
++      supervisor nano vim-tiny bash \
 + && rm -rf /var/lib/apt/lists/*
 +
-+# Claude Code is the bundled coding-agent CLI. The wrapper expects users to
-+# supply ANTHROPIC_API_KEY via deploy params; `claude -p` consumes it.
++# ttyd static binary (statically linked, version pinned). Serves the
++# /shell webshell — that's the user's only door for per-CLI config
++# (`claude /login`, `claude config set ...`, etc.).
++ARG TTYD_VERSION=1.7.7
++ARG TARGETARCH
++RUN ARCH=$([ "${TARGETARCH:-amd64}" = "arm64" ] && echo aarch64 || echo x86_64) \
++ && curl -fsSL "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.${ARCH}" \
++      -o /usr/local/bin/ttyd \
++ && chmod +x /usr/local/bin/ttyd \
++ && /usr/local/bin/ttyd --version
++
++# Claude Code is the bundled coding-agent CLI. Auth is the user's
++# responsibility — they `claude /login` (or whatever) inside the /shell
++# webshell, and Claude Code writes credentials into ~/.claude/ which is
++# the persisted HOME.
 +RUN npm install -g @anthropic-ai/claude-code@latest \
 + && npm cache clean --force
 +
@@ -105,69 +134,128 @@ index 0000000..13aebd0
 +COPY --from=builder /build/next/src/lib/templates  ./next/src/lib/templates
 +
 +COPY lazycat-entrypoint.sh /usr/local/bin/lazycat-entrypoint.sh
++COPY supervisord.conf      /etc/supervisor/supervisord.conf
 +RUN chmod +x /usr/local/bin/lazycat-entrypoint.sh
 +
 +ENV NODE_ENV=production
 +ENV NEXT_TELEMETRY_DISABLED=1
 +ENV PORT=3000
 +ENV HOSTNAME=0.0.0.0
-+# Default HOME → persisted volume so Claude Code's ~/.claude state and
-+# html-anything's ~/.html-anything state both survive container restarts.
++# HOME → persisted volume so Claude Code's ~/.claude state and html-anything's
++# ~/.html-anything state survive container restarts; the webshell user lands
++# in this directory too.
 +ENV HOME=/lzcapp/var/persist
 +
-+EXPOSE 3000
++# 3000 = Next.js;  7681 = ttyd. Both proxied through lazycat (see manifest).
++EXPOSE 3000 7681
 +
 +ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/lazycat-entrypoint.sh"]
 diff --git a/lazycat-entrypoint.sh b/lazycat-entrypoint.sh
 new file mode 100755
-index 0000000..3426ce5
+index 0000000..e5382be
 --- /dev/null
 +++ b/lazycat-entrypoint.sh
-@@ -0,0 +1,47 @@
+@@ -0,0 +1,35 @@
 +#!/usr/bin/env bash
 +# Lazycat-flavored entrypoint for html-anything.
 +#
-+# Layout inside the container:
-+#   /app/next/server.js                 → Next.js standalone entry
-+#   /app/next/.next/static/             → built static assets
-+#   /app/next/public/                   → public assets
-+#   /app/next/src/lib/templates/skills/ → bundled skill registry
++# The wrapper owns *persistence* (HOME → /lzcapp/var/persist) and *access*
++# (ttyd /shell webshell). It does NOT own per-CLI configuration: each CLI
++# (claude / codex / cursor-agent / …) uses its own auth flow and writes
++# to its own dot-dir under $HOME. Because $HOME is bind-mounted to a
++# lazycat persistent volume, anything those CLIs persist (credentials,
++# settings, sessions) survives upgrades and restarts.
 +#
-+# Persistent state (bind-mounted from /lzcapp/var/persist on the host):
-+#   $HOME/.claude/             → Claude Code session + settings
-+#   $HOME/.html-anything/      → marketplace skills + deploy creds
-+#
-+# We don't ship a default ANTHROPIC_API_KEY — if the user leaves the deploy
-+# param blank, claude-code will fail at first prompt and the UI surfaces the
-+# stderr verbatim. That's the right UX: the wrapper can't paper over a
-+# missing credential.
++# So the typical first-time setup is:
++#   1. Open https://html-anything.<box-domain>/shell/
++#   2. Run `claude /login` (OAuth) — credentials land in ~/.claude/.credentials.json
++#      Or configure an API key per Claude Code's own docs (apiKeyHelper, env, …)
++#   3. Back to the main UI, prompt away.
 +
 +set -euo pipefail
 +
 +: "${HOME:=/lzcapp/var/persist}"
 +export HOME
 +
-+mkdir -p "${HOME}/.claude" "${HOME}/.html-anything/skills"
++# Ensure the persistent dot-dirs exist so each CLI / app can write without
++# having to mkdir on first use. We don't seed any files here — that's each
++# CLI's responsibility.
++mkdir -p \
++  "${HOME}/.claude" \
++  "${HOME}/.html-anything/skills"
 +
-+# Claude Code respects ANTHROPIC_API_KEY at every spawn; surface a friendly
-+# log when the user hasn't filled it yet so they know where to look.
-+if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
-+  echo "[lazycat-entrypoint] WARNING: ANTHROPIC_API_KEY is empty." >&2
-+  echo "[lazycat-entrypoint] Fill it in the lazycat 应用设置 → 部署参数 panel," >&2
-+  echo "[lazycat-entrypoint] then restart the app. Claude Code invocations will fail until then." >&2
-+fi
-+
-+# Optional: route Claude Code through a relay (deepseek-r1 proxy, custom
-+# Anthropic endpoint, …). When set, claude-code forwards every call here.
-+if [ -n "${ANTHROPIC_BASE_URL:-}" ]; then
-+  echo "[lazycat-entrypoint] Using ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL}"
-+fi
-+
-+cd /app/next
-+
-+# Skip Claude Code's first-run onboarding wizard inside the container. The
-+# wizard wants a TTY; we want a one-shot CLI.
++# Skip Claude Code's interactive onboarding wizard inside the container —
++# the wizard expects a TTY; we want one-shot CLI invocations from Next.js.
 +export DISABLE_AUTOUPDATER=1
 +export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
 +
-+exec node server.js
++# Hand off to supervisord, which keeps `next` and `ttyd` alive in parallel.
++exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf
+diff --git a/supervisord.conf b/supervisord.conf
+new file mode 100644
+index 0000000..3b6cf7d
+--- /dev/null
++++ b/supervisord.conf
+@@ -0,0 +1,62 @@
++; Supervisor config — keep Next.js and ttyd alive in parallel.
++; All output streams to stdout/stderr so `docker logs` / lazycat shows them.
++
++[supervisord]
++nodaemon=true
++user=root
++logfile=/dev/stdout
++logfile_maxbytes=0
++pidfile=/run/supervisord.pid
++
++[unix_http_server]
++file=/run/supervisor.sock
++
++[supervisorctl]
++serverurl=unix:///run/supervisor.sock
++
++[rpcinterface:supervisor]
++supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
++
++; ── Next.js standalone server ─────────────────────────────────────────────────
++;
++; Started from /app/next so process.cwd() matches what
++; next/src/lib/templates/loader.ts expects (it joins cwd + 'src/lib/templates/skills').
++[program:next]
++command=/usr/local/bin/node server.js
++directory=/app/next
++autostart=true
++autorestart=true
++startsecs=5
++stopsignal=TERM
++stopwaitsecs=15
++stdout_logfile=/dev/stdout
++stdout_logfile_maxbytes=0
++stderr_logfile=/dev/stderr
++stderr_logfile_maxbytes=0
++
++; ── ttyd webshell ─────────────────────────────────────────────────────────────
++;
++; Served at /shell behind lazycat's reverse-proxy + platform auth (only
++; logged-in lazycat users on the same box reach this subdomain).
++;
++; Flags:
++;   --writable          allow keyboard input (default is read-only)
++;   --base-path /shell  serve html / ws under /shell so reverse-proxy passes
++;                       URLs through unchanged
++;   --port 7681         lazycat manifest reverse-proxies /shell → main:7681
++;   --max-clients 4     cheap DOS guard
++;
++; bash starts in $HOME (which is the lazycat persist bind), so users land
++; right where their CLI config dirs live.
++[program:ttyd]
++command=/usr/local/bin/ttyd --writable --base-path /shell --port 7681 --max-clients 4 bash
++directory=%(ENV_HOME)s
++autostart=true
++autorestart=true
++startsecs=3
++stopsignal=TERM
++stopwaitsecs=5
++stdout_logfile=/dev/stdout
++stdout_logfile_maxbytes=0
++stderr_logfile=/dev/stderr
++stderr_logfile_maxbytes=0
