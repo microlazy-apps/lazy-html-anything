@@ -193,10 +193,10 @@ index 0000000..e5382be
 +exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf
 diff --git a/supervisord.conf b/supervisord.conf
 new file mode 100644
-index 0000000..3b6cf7d
+index 0000000..6935597
 --- /dev/null
 +++ b/supervisord.conf
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,64 @@
 +; Supervisor config — keep Next.js and ttyd alive in parallel.
 +; All output streams to stdout/stderr so `docker logs` / lazycat shows them.
 +
@@ -240,15 +240,17 @@ index 0000000..3b6cf7d
 +;
 +; Flags:
 +;   --writable          allow keyboard input (default is read-only)
-+;   --base-path /shell  serve html / ws under /shell so reverse-proxy passes
-+;                       URLs through unchanged
-+;   --port 7681         lazycat manifest reverse-proxies /shell → main:7681
++;   --port 7681         lazycat manifest reverse-proxies /shell/ → main:7681
 +;   --max-clients 4     cheap DOS guard
 +;
-+; bash starts in $HOME (which is the lazycat persist bind), so users land
-+; right where their CLI config dirs live.
++; NO --base-path: lazycat strips the /shell/ prefix before forwarding, so
++; ttyd sees /, /token, /ws and serves them from root. Re-adding
++; --base-path would make ttyd 404 the stripped paths.
++;
++; bash starts in $HOME (lazycat persist bind), so users land right where
++; their CLI config dirs live.
 +[program:ttyd]
-+command=/usr/local/bin/ttyd --writable --base-path /shell --port 7681 --max-clients 4 bash
++command=/usr/local/bin/ttyd --writable --port 7681 --max-clients 4 bash
 +directory=%(ENV_HOME)s
 +autostart=true
 +autorestart=true
