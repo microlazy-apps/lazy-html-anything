@@ -4,7 +4,8 @@
 
 ## Lazycat appstore identifiers
 
-- **package id**: `cloud.lazycat.app.html-anything`
+- **package id**: `cloud.lazycat.app.lazy-html-anything`
+  (v0.0.7 起；v0.0.1-v0.0.6 用过 `cloud.lazycat.app.html-anything`，被第三方占了，403)
 - **app_id**: (待 bootstrap 后回填) (recorded YYYY-MM-DD)
 - **subdomain**: `html-anything` → `https://html-anything.{box-domain}`
 - **bootstrap workflow**: when re-running `bootstrap-app.yml` to resubmit a

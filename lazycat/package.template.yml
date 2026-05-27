@@ -1,4 +1,4 @@
-package: cloud.lazycat.app.html-anything
+package: cloud.lazycat.app.lazy-html-anything
 version: ${VERSION}
 name: HTML Anything
 description: AI 驱动的 HTML 编辑器 —— 把 Markdown / CSV / JSON 一键变成可发布的 HTML

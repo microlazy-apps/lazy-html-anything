@@ -7,7 +7,7 @@
 在懒猫微服开发者中心搜索 **HTML Anything** 安装；或从本仓库 [Releases](https://github.com/microlazy-apps/lazy-html-anything/releases) 下载 `.lpk`：
 
 ```sh
-lzc-cli lpk install cloud.lazycat.app.html-anything-X.Y.Z.lpk
+lzc-cli lpk install cloud.lazycat.app.lazy-html-anything-X.Y.Z.lpk
 ```
 
 ## 首次配置
